@@ -46,7 +46,8 @@ SKIP_NPU_BUILD = os.getenv("FLASH_ATTENTION_SKIP_NPU_BUILD", "FALSE") == "TRUE"
 #          Runtime dispatch in flash_attn_npu_v3/__init__.py picks the
 #          matching backend per host via torch_npu.npu.get_device_name(),
 #          so a single wheel runs on both 910 and 950.
-#   "all"  build v2 + both v3 backends.
+#   "v4"   build v4 backend (Ascend 910B/C, csrc/flash_attn_npu_v4/)
+#   "all"  build v2 + v3 + v4 backends.
 BUILD_VERSION = os.getenv("FLASH_ATTN_BUILD_VERSION", "all").lower()
 
 def get_platform():
@@ -108,9 +109,9 @@ class BishengBuildExt(build_ext):
         abi_flag = f"-D_GLIBCXX_USE_CXX11_ABI={1 if torch_abi else 0}"
 
         aicpu_objects = []
-        if ext.name == "flash_attn_npu_3":
-            v3_dir = os.path.join(this_dir, "csrc", "flash_attn_npu_v3")
-            aicpu_src = os.path.join(v3_dir, "fa_metadata.aicpu")
+        if ext.name in ("flash_attn_npu_3", "flash_attn_npu_4"):
+            v_dir = os.path.join(this_dir, "csrc", f"flash_attn_npu_v{ext.name[-1]}")
+            aicpu_src = os.path.join(v_dir, "fa_metadata.aicpu")
             aicpu_obj = os.path.join(os.path.dirname(ext_fullpath), "fa_metadata.o")
             aicpu_inc = os.path.join(ascend_home, "aarch64-linux/asc/include/aicpu_api")
             aicpu_lib = os.path.join(ascend_home, "aarch64-linux/lib64/device/lib64")
@@ -127,7 +128,7 @@ class BishengBuildExt(build_ext):
                 "-D_FORTIFY_SOURCE=2",
                 "-D_GNU_SOURCE",
                 f"-I{aicpu_inc}",
-                f"-I{v3_dir}",  # tilingdata.h
+                f"-I{v_dir}",  # tilingdata.h
                 f"--cce-aicpu-L{aicpu_lib}",
                 "--cce-aicpu-laicpu_api",
                 f"--cce-aicpu-toolkit-path={os.path.join(hcc, 'bin')}",
@@ -206,7 +207,7 @@ ext_modules = []
 
 if os.path.isdir(".git"):
     submodules = []
-    if BUILD_VERSION in ("v2", "v3", "all"):
+    if BUILD_VERSION in ("v2", "v3", "v4", "all"):
         submodules.append("csrc/catlass")
     if BUILD_VERSION in ("v3", "all"):
         submodules.append("csrc_AscendC950/catlass")
@@ -215,7 +216,7 @@ if os.path.isdir(".git"):
             ["git", "submodule", "update", "--init", *submodules], check=True
         )
 else:
-    if BUILD_VERSION in ("v2", "v3", "all"):
+    if BUILD_VERSION in ("v2", "v3", "v4", "all"):
         assert os.path.exists(
             "csrc/catlass/include/catlass/catlass.hpp"
         ), "csrc/catlass is missing, please use source distribution or git clone"
@@ -227,6 +228,7 @@ else:
 source_files = glob.glob(os.path.join(this_dir, "csrc/flash_attn_npu", "flash_api.cpp"), recursive=True)
 source_files += glob.glob(os.path.join(this_dir, "csrc/flash_attn_npu", "fag_general_host.cpp"), recursive=True)
 source_files_v3 = glob.glob(os.path.join(this_dir, "csrc/flash_attn_npu_v3", "flash_api.cpp"), recursive=True)
+source_files_v4 = glob.glob(os.path.join(this_dir, "csrc/flash_attn_npu_v4", "flash_api.cpp"), recursive=True)
 source_files_950_v3 = glob.glob(os.path.join(this_dir, "csrc_AscendC950/flash_attn_npu_v3", "flash_api.cpp"), recursive=True)
 source_files_950_v3 += glob.glob(os.path.join(this_dir, "csrc_AscendC950/flash_attn_npu_v3", "fai_host_api.cpp"),recursive=True)
 
@@ -252,6 +254,13 @@ if not SKIP_NPU_BUILD:
         ext_modules.append(Extension(
             name="flash_attn_npu_950_3",
             sources=source_files_950_v3,
+            language="c++",
+        ))
+
+    if BUILD_VERSION in ("v4", "all"):
+        ext_modules.append(Extension(
+            name="flash_attn_npu_4",
+            sources=source_files_v4,
             language="c++",
         ))
 
