@@ -541,19 +541,15 @@ class FlashAttnFunc(torch.autograd.Function):
         q,
         k,
         v,
-        softmax_scale,
-        causal,
-        qv=None,
-        q_descale=None, k_descale=None, v_descale=None,
+        qv=None, 
+        softmax_scale=None,
+        causal=False,
         window_size=(-1, -1),
-        attention_chunk=0,
         softcap=0.0,
         num_splits=1,
         pack_gqa=None,
         deterministic=False,
-        sm_margin=0,
-        return_softmax=False,
-        scheduler_metadata=None,
+        return_lse=False,
     ):
         if softmax_scale is None:
             softmax_scale = (q.shape[-1] + (qv.shape[-1] if qv is not None else 0)) ** (-0.5)
@@ -570,28 +566,28 @@ class FlashAttnFunc(torch.autograd.Function):
             None, None,   # max_seqlen_q/k
             None, None, None,   # page_table, kv_batch_idx, leftpad_k,
             None, None, None,  # rotary_cos/sin, seqlens_rotary
-            q_descale, k_descale, v_descale,
+            None, None, None,  # q_descale, k_descale, v_descale
             softmax_scale,
             causal=causal,
             window_size_left=window_size[0],
             window_size_right=window_size[1],
-            attention_chunk=attention_chunk,
+            attention_chunk=0,
             softcap=softcap,
-            scheduler_metadata=scheduler_metadata,
+            scheduler_metadata=None,
             num_splits=num_splits,
             pack_gqa=pack_gqa,
-            sm_margin=sm_margin,
+            sm_margin=0,
         )
         # ctx.save_for_backward(q, k, v, out_padded, softmax_lse)
         ctx.save_for_backward(q, k, v, out, softmax_lse)
         ctx.softmax_scale = softmax_scale
         ctx.causal = causal
         ctx.window_size = window_size
-        ctx.attention_chunk = attention_chunk
+        ctx.attention_chunk = 0
         ctx.softcap = softcap
         ctx.deterministic = deterministic
-        ctx.sm_margin = sm_margin
-        return (out, softmax_lse) if return_softmax else out
+        ctx.sm_margin = 0
+        return (out, softmax_lse) if return_lse else out
 
     @staticmethod
     def backward(ctx, dout, *args):
@@ -622,8 +618,8 @@ class FlashAttnFunc(torch.autograd.Function):
         dq = dq[..., : q.shape[-1]]  # We could have padded the head dimension
         dk = dk[..., : k.shape[-1]]
         dv = dv[..., : v.shape[-1]]
-        return dq, dk, dv, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
+        return dq, dk, dv, None, None, None, None, None, None, None, None, None
 
 class FlashAttnVarlenFunc(torch.autograd.Function):
 
@@ -635,23 +631,19 @@ class FlashAttnVarlenFunc(torch.autograd.Function):
         v,
         cu_seqlens_q,
         cu_seqlens_k,
-        seqused_q,
-        seqused_k,
         max_seqlen_q,
         max_seqlen_k,
+        seqused_q,
+        seqused_k,
         softmax_scale,
         causal,
         qv=None,
-        q_descale=None, k_descale=None, v_descale=None,
         window_size=(-1, -1),
-        attention_chunk=0,
         softcap=0.0,
         num_splits=1,
         pack_gqa=None,
         deterministic=False,
-        sm_margin=0,
-        return_softmax=False,
-        scheduler_metadata=None,
+        return_lse=False,
     ):
         if softmax_scale is None:
             softmax_scale = (q.shape[-1] + (qv.shape[-1] if qv is not None else 0)) ** (-0.5)
@@ -672,17 +664,17 @@ class FlashAttnVarlenFunc(torch.autograd.Function):
             max_seqlen_k,
             None, None, None,   # page_table, kv_batch_idx, leftpad_k,
             None, None, None,  # rotary_cos/sin, seqlens_rotary
-            q_descale, k_descale, v_descale,
+            None, None, None,  # q_descale, k_descale, v_descale
             softmax_scale,
             causal=causal,
             window_size_left=window_size[0],
             window_size_right=window_size[1],
-            attention_chunk=attention_chunk,
+            attention_chunk=0,
             softcap=softcap,
-            scheduler_metadata=scheduler_metadata,
+            scheduler_metadata=None,
             num_splits=num_splits,
             pack_gqa=pack_gqa,
-            sm_margin=sm_margin,
+            sm_margin=0,
         )
         # ctx.save_for_backward(q, k, v, out_padded, softmax_lse, cu_seqlens_q, cu_seqlens_k, seqused_q, seqused_k)
         ctx.save_for_backward(q, k, v, out, softmax_lse, cu_seqlens_q, cu_seqlens_k, seqused_q, seqused_k)
@@ -691,11 +683,11 @@ class FlashAttnVarlenFunc(torch.autograd.Function):
         ctx.softmax_scale = softmax_scale
         ctx.causal = causal
         ctx.window_size = window_size
-        ctx.attention_chunk = attention_chunk
+        ctx.attention_chunk = 0
         ctx.softcap = softcap
         ctx.deterministic = deterministic
-        ctx.sm_margin = sm_margin
-        return (out, softmax_lse) if return_softmax else out
+        ctx.sm_margin = 0
+        return (out, softmax_lse) if return_lse else out
 
     @staticmethod
     def backward(ctx, dout, *args):
@@ -729,7 +721,7 @@ class FlashAttnVarlenFunc(torch.autograd.Function):
         dq = dq[..., : q.shape[-1]]  # We could have padded the head dimension
         dk = dk[..., : k.shape[-1]]
         dv = dv[..., : v.shape[-1]]
-        return dq, dk, dv, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
+        return dq, dk, dv, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
 
 def flash_attn_qkvpacked_func(
@@ -743,7 +735,7 @@ def flash_attn_qkvpacked_func(
     deterministic=False,
     num_heads_q=None,
     sm_margin=0,
-    return_attn_probs=False,
+    return_lse=False,
 ):
     """dropout_p should be set to 0.0 during evaluation
     If Q, K, V are already stacked into 1 tensor, this function will be faster than
@@ -767,15 +759,15 @@ def flash_attn_qkvpacked_func(
             the attention score of query i and key j.
         deterministic: bool. Whether to use the deterministic implementation of the backward pass,
             which is slightly slower and uses more memory. The forward pass is always deterministic.
-        return_attn_probs: bool. Whether to return the attention probabilities. This option is for
+        return_lse: bool. Whether to return the attention probabilities. This option is for
            testing only. The returned probabilities are not guaranteed to be correct
            (they might not have the right scaling).
     Return:
         out: (batch_size, seqlen, nheads, headdim).
-        softmax_lse [optional, if return_attn_probs=True]: (batch_size, nheads, seqlen). The
+        softmax_lse [optional, if return_lse=True]: (batch_size, nheads, seqlen). The
             logsumexp of each row of the matrix QK^T * scaling (e.g., log of the softmax
             normalization factor).
-        S_dmask [optional, if return_attn_probs=True]: (batch_size, nheads, seqlen, seqlen).
+        S_dmask [optional, if return_lse=True]: (batch_size, nheads, seqlen, seqlen).
             The output of softmax (possibly with different scaling). It also encodes the dropout
             pattern (negative means that location was dropped, nonnegative means it was kept).
     """
@@ -790,30 +782,43 @@ def flash_attn_qkvpacked_func(
         deterministic,
         num_heads_q,
         sm_margin,
-        return_attn_probs,
+        return_lse,
     )
+
 
 
 def flash_attn_func(
     q,
     k,
     v,
+    qv=None, 
     softmax_scale=None,
     causal=False,
-    qv=None,
-    q_descale=None, k_descale=None, v_descale=None,
     window_size=(-1, -1),
-    attention_chunk=0,
-    softcap=0.0,
+    softcap: float = 0.0,
     num_splits=1,
     pack_gqa=None,
     deterministic=False,
-    sm_margin=0,
-    return_attn_probs=False,
-    scheduler_metadata=None,
+    return_lse=False,
+
+    # GPU specific arguments
+    # gather_kv_indices=None,
+    # learnable_sink=None,
+    # score_mod = None,
+    # score_mod_bwd  = None,
+    # mask_mod = None,
+    # aux_tensors = None,
+    # aux_scalars = None,
+    # block_sparse_tensors = None,
+    # block_sparse_tensors_bwd = None,
+    
+    # NPU specific arguments
+    # q_descale=None, k_descale=None, v_descale=None,
+    # attention_chunk=0,
+    # sm_margin=0,
+    # scheduler_metadata=None,
 ):
-    """dropout_p should be set to 0.0 during evaluation
-    Supports multi-query and grouped-query attention (MQA/GQA) by passing in KV with fewer heads
+    """Supports multi-query and grouped-query attention (MQA/GQA) by passing in KV with fewer heads
     than Q. Note that the number of heads in Q must be divisible by the number of heads in KV.
     For example, if Q has 6 heads and K, V have 2 heads, head 0, 1, 2 of Q will attention to head
     0 of K, V, and head 3, 4, 5 of Q will attention to head 1 of K, V.
@@ -838,22 +843,26 @@ def flash_attn_func(
         q: (batch_size, seqlen, nheads, headdim)
         k: (batch_size, seqlen, nheads_k, headdim)
         v: (batch_size, seqlen, nheads_k, headdim)
-        dropout_p: float. Dropout probability.
+        qv: (batch_size, seqlen, nheads, headdim_v). Optional tensor for cross-attention
+            value projection. If provided, softmax_scale is adjusted to
+            1 / sqrt(q.shape[-1] + qv.shape[-1]).
         softmax_scale: float. The scaling of QK^T before applying softmax.
             Default to 1 / sqrt(headdim).
         causal: bool. Whether to apply causal attention mask (e.g., for auto-regressive modeling).
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
-        alibi_slopes: (nheads,) or (batch_size, nheads), fp32. A bias of
-            (-alibi_slope * |i + seqlen_k - seqlen_q - j|)
-            is added to the attention score of query i and key j.
+        softcap: float. Anything > 0 activates softcapping attention.
+        num_splits: int. If > 1, split the key/value into this many chunks along the sequence.
+            If num_splits == 1, we don't split the key/value. If num_splits == 0, use a heuristic
+            to automatically determine the number of splits.
+        pack_gqa: Optional bool. If True, enables packed GQA optimization.
         deterministic: bool. Whether to use the deterministic implementation of the backward pass,
             which is slightly slower and uses more memory. The forward pass is always deterministic.
-        return_attn_probs: bool. Whether to return the attention probabilities. This option is for
-           testing only. The returned probabilities are not guaranteed to be correct
-           (they might not have the right scaling).
+        return_lse: bool. Whether to return the logsumexp of the attention scores. This option is
+            for testing only. The returned logsumexp are not guaranteed to be correct
+            (they might not have the right scaling).
     Return:
         out: (batch_size, seqlen, nheads, headdim).
-        softmax_lse [optional, if return_attn_probs=True]: (batch_size, nheads, seqlen). The
+        softmax_lse [optional, if return_lse=True]: (batch_size, nheads, seqlen). The
             logsumexp of each row of the matrix QK^T * scaling (e.g., log of the softmax
             normalization factor).
     """
@@ -861,19 +870,15 @@ def flash_attn_func(
         q,
         k,
         v,
+        qv, 
         softmax_scale,
         causal,
-        qv,
-        q_descale, k_descale, v_descale,
         window_size,
-        attention_chunk,
         softcap,
         num_splits,
         pack_gqa,
         deterministic,
-        sm_margin,
-        return_attn_probs,
-        scheduler_metadata,
+        return_lse,
     )
 
 
@@ -890,16 +895,29 @@ def flash_attn_varlen_func(
     softmax_scale=None,
     causal=False,
     qv=None,
-    q_descale=None, k_descale=None, v_descale=None,
     window_size=(-1, -1),
-    attention_chunk=0,
     softcap=0.0,
     num_splits=1,
     pack_gqa=None,
-    deterministic=False,
-    sm_margin=0,
-    return_attn_probs=False,
-    scheduler_metadata=None,
+    deterministic=False, 
+    return_lse=False,
+    # GPU specific arguments
+    # min_seqlen_k=None,
+    # gather_kv_indices=None,
+    # page_table=None,
+    # learnable_sink=None,
+    # score_mod=None,
+    # score_mod_bwd=None,
+    # mask_mod=None,
+    # block_sparse_tensors=None,
+    # aux_tensors=None,
+    # aux_scalars=None,
+
+    # NPU specific arguments
+    # sm_margin=0,
+    # scheduler_metadata=None,
+    # q_descale=None, k_descale=None, v_descale=None,
+    # attention_chunk=0,
 ):
     return FlashAttnVarlenFunc.apply(
         q,
@@ -907,23 +925,19 @@ def flash_attn_varlen_func(
         v,
         cu_seqlens_q,
         cu_seqlens_k,
-        seqused_q,
-        seqused_k,
         max_seqlen_q,
         max_seqlen_k,
+        seqused_q,
+        seqused_k,
         softmax_scale,
         causal,
         qv,
-        q_descale, k_descale, v_descale,
         window_size,
-        attention_chunk,
         softcap,
         num_splits,
         pack_gqa,
         deterministic,
-        sm_margin,
-        return_attn_probs,
-        scheduler_metadata,
+        return_lse,
     )
 
 

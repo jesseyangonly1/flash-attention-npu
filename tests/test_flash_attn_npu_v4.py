@@ -356,15 +356,15 @@ def test_fa_custom_ops(data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_
         torch.testing.assert_close(softmax_lse.cpu(), golden_lseL.cpu(), rtol=rtol, atol=atol)
 
 test_cases = [
-    # (data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_seqlen, head_size, return_attn_probs, is_causal)
+    # (data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_seqlen, head_size, return_lse, is_causal)
     (torch.float16, 5, 4, 4, 1024, 1024, 128, True, True),    # fp16 GQA causal return_attn
     (torch.float16, 7, 1, 1, 512, 512, 128, False, False),    # fp16 non-causal no return
     (torch.float16, 4, 2, 1, 513, 513, 128, False, False),    # fp16 GQA non-causal
     (torch.bfloat16, 5, 4, 4, 1024, 1024, 128, True, True),   # bf16 GQA causal return_attn
     (torch.bfloat16, 7, 1, 1, 512, 512, 128, False, False),   # bf16 non-causal no return
 ]
-@pytest.mark.parametrize("data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_seqlen, head_size, return_attn_probs, is_causal", test_cases)
-def test_fa_fwd_custom_ops(data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_seqlen, head_size, return_attn_probs, is_causal):
+@pytest.mark.parametrize("data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_seqlen, head_size, return_lse, is_causal", test_cases)
+def test_fa_fwd_custom_ops(data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_seqlen, head_size, return_lse, is_causal):
     name = torch_npu.npu.get_device_name() if torch_npu.npu.device_count() > 0 else ""
     if "Ascend910" not in name:
         pytest.skip("flash_attn_func only support Ascend910")
@@ -388,8 +388,8 @@ def test_fa_fwd_custom_ops(data_type, batch_size, num_heads, kv_heads, q_seqlen,
         causal=is_causal,
         window_size=[window_size_left, window_size_right],
         softcap=softcap,
-        return_attn_probs=return_attn_probs)
-    if not return_attn_probs:
+        return_lse=return_lse)
+    if not return_lse:
         out_out = ret
     else:
         out_out, softmax_lse = ret
@@ -413,7 +413,7 @@ def test_fa_fwd_custom_ops(data_type, batch_size, num_heads, kv_heads, q_seqlen,
     rtol = 1e-2
     atol = 1e-2
     torch.testing.assert_close(out_out.cpu(), golden_out.cpu(), rtol=rtol, atol=atol)
-    if return_attn_probs:
+    if return_lse:
         torch.testing.assert_close(softmax_lse.cpu(), golden_lseL.cpu(), rtol=rtol, atol=atol)
 
 
@@ -459,7 +459,7 @@ def test_fa_varlen_ops(data_type, batch_size, num_heads, kv_heads, q_seqlen, kv_
         causal=is_causal,
         window_size=(window_size_left, window_size_right),
         softcap=softcap,
-        return_attn_probs=True,
+        return_lse=True,
     )
     golden_out = torch.empty((batch_size * q_seqlen, num_heads, head_size), dtype=data_type)
     golden_lseL = torch.empty((num_heads, batch_size * q_seqlen), dtype=torch.float32)
