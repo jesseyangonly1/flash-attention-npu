@@ -44,7 +44,8 @@ SKIP_NPU_BUILD = os.getenv("FLASH_ATTENTION_SKIP_NPU_BUILD", "FALSE") == "TRUE"
 #   "v3"   build the v3 backends selected by FLASH_ATTN_BUILD_NPU:
 #            flash_attn_npu_3       (Ascend 910B/C, csrc/)
 #            flash_attn_npu_950_3   (Ascend 950,    csrc_AscendC950/)
-#   "all"  build v2 + the selected v3 backends.
+#   "v4"   build v4 backend (Ascend 910B/C, csrc/flash_attn_npu_v4/)
+#   "all"  build v2 + v3 + v4 backends
 # FLASH_ATTN_BUILD_NPU selects which NPU hardware backends to build:
 #   "910"  only Ascend 910B/C backends (flash_attn_npu_2, flash_attn_npu_3)
 #   "950"  only the Ascend 950 backend  (flash_attn_npu_950_3)
@@ -175,17 +176,14 @@ class BishengBuildExt(build_ext):
         self._toolchains[ext_name] = (compiler, compile_common, link_arch_flags, link_flags)
         return self._toolchains[ext_name]
 
-    def _build_aicpu_metadata(self, ext_fullpath):
-        """Compile fa_metadata.aicpu (host AICPU object) for the v3-910 extension
-        (flash_attn_npu_3). This is a separate `bisheng -x aicpu` invocation
-        (host CPU code cross-compiled with hcc, not ASC device code); the
-        resulting object is linked into flash_attn_npu_3 alongside the ASC device
-        objects. Returns the .o path, or None if there is no aicpu source.
-        Preserved from main's metadata feature through the parallel-pipeline
-        refactor."""
+    def _build_aicpu_metadata(self, ext_fullpath, csrc_dir):
+        """Compile fa_metadata.aicpu (host AICPU object) for the v3-910 / v4-910
+        extension. This is a separate `bisheng -x aicpu` invocation (host CPU
+        code cross-compiled with hcc, not ASC device code); the resulting object
+        is linked into the extension alongside the ASC device objects. Returns
+        the .o path, or None if there is no aicpu source."""
         ascend_home = os.getenv("ASCEND_TOOLKIT_HOME", os.getenv("ASCEND_HOME_PATH", "/usr/local/Ascend"))
-        v3_dir = os.path.join(this_dir, "csrc", "flash_attn_npu_v3")
-        aicpu_src = os.path.join(v3_dir, "fa_metadata.aicpu")
+        aicpu_src = os.path.join(csrc_dir, "fa_metadata.aicpu")
         if not os.path.exists(aicpu_src):
             return None
         aicpu_obj = os.path.join(os.path.dirname(ext_fullpath), "fa_metadata.o")
@@ -205,7 +203,7 @@ class BishengBuildExt(build_ext):
             "-D_FORTIFY_SOURCE=2",
             "-D_GNU_SOURCE",
             f"-I{aicpu_inc}",
-            f"-I{v3_dir}",  # tilingdata.h
+            f"-I{csrc_dir}",  # tilingdata.h
             f"--cce-aicpu-L{aicpu_lib}",
             "--cce-aicpu-laicpu_api",
             f"--cce-aicpu-toolkit-path={os.path.join(hcc, 'bin')}",
@@ -271,13 +269,15 @@ class BishengBuildExt(build_ext):
                 ext_name, obj = fut.result()
                 objs_by_ext[ext_name].append(obj)
 
-        # AICPU metadata object for the v3-910 extension: compiled separately
-        # (host code, `bisheng -x aicpu`) and appended to that extension's link
-        # set. Built after the parallel ASC compiles, before linking.
+        # AICPU metadata object for the v3-910 / v4-910 extension: compiled
+        # separately (host code, `bisheng -x aicpu`) and appended to that
+        # extension's link set. Built after the parallel ASC compiles, before
+        # linking.
         for ext in self.extensions:
-            if ext.name == "flash_attn_npu_3":
+            if ext.name in ("flash_attn_npu_3", "flash_attn_npu_4"):
+                csrc_dir = os.path.join(this_dir, "csrc", "flash_attn_npu_v" + ext.name[-1])
                 ext_fullpath = self.get_ext_fullpath(ext.name)
-                aicpu_obj = self._build_aicpu_metadata(ext_fullpath)
+                aicpu_obj = self._build_aicpu_metadata(ext_fullpath, csrc_dir)
                 if aicpu_obj is not None:
                     objs_by_ext[ext.name].append(aicpu_obj)
 
@@ -311,7 +311,7 @@ ext_modules = []
 build_910 = BUILD_NPU in ("910", "all")
 build_950 = BUILD_NPU in ("950", "all")
 catlass_needed = []
-if build_910 and BUILD_VERSION in ("v2", "v3", "all"):
+if BUILD_VERSION in ("v2", "v3", "v4", "all"):
     catlass_needed.append("csrc/catlass")
 if build_950 and BUILD_VERSION in ("v3", "all"):
     catlass_needed.append("csrc_AscendC950/catlass")
@@ -351,7 +351,8 @@ source_files_950_v3 += glob.glob(os.path.join(this_dir, "csrc_AscendC950/flash_a
 # instantiated only in the autogen TUs. head_dim is a runtime tiling axis, not a
 # generation axis, so it is not enumerated here.
 source_files_950_v3 += glob.glob(os.path.join(this_dir, "csrc_AscendC950/flash_attn_npu_v3", "autogen", "*.cpp"), recursive=True)
-
+source_files_v4 = glob.glob(os.path.join(this_dir, "csrc/flash_attn_npu_v4", "flash_api.cpp"), recursive=True)
+source_files_v4 += glob.glob(os.path.join(this_dir, "csrc/flash_attn_npu_v4", "autogen", "*.cpp"), recursive=True)
 if not SKIP_NPU_BUILD:
     if build_910 and BUILD_VERSION in ("v2", "all"):
         ext_modules.append(Extension(
@@ -374,6 +375,13 @@ if not SKIP_NPU_BUILD:
         ext_modules.append(Extension(
             name="flash_attn_npu_950_3",
             sources=source_files_950_v3,
+            language="c++",
+        ))
+
+    if BUILD_VERSION in ("v4", "all"):
+        ext_modules.append(Extension(
+            name="flash_attn_npu_4",
+            sources=source_files_v4,
             language="c++",
         ))
 
