@@ -11,16 +11,14 @@ from typing import List, Optional
 # <dtype, head_dim, is_causal> — one explicit instantiation per .cu so nvcc
 # compiles them in parallel. On the NPU side head_dim is NOT a template axis:
 # the forward (FAInfer) does not bin by head_dim at all (it is a runtime tiling
-# value), and the backward (FAGGeneral) selects head_dim at runtime via a
-# switch() inside the impl (bwd_dispatch_common.hpp). So head_dim is deliberately
-# dropped here.
+# value). So head_dim is deliberately dropped here.
 #
 # The real compile-time axes are dtype and input layout (TND / BSND). Each
 # generated .cpp holds exactly ONE explicit instantiation of the per-family
 # dispatch template, so the heavy kernel templates land in separate,
 # parallel-compiled translation units. The impl bodies live in the shared
-# fwd_dispatch_impl.hpp / bwd_dispatch_common.hpp headers (one directory up);
-# this script only emits the instantiation stubs.
+# fwd_dispatch_impl.hpp header (one directory up); this script only emits the
+# instantiation stubs.
 
 # dtype key -> C++ type token
 DTYPE_MAP = {
@@ -28,10 +26,10 @@ DTYPE_MAP = {
     "bf16": "bfloat16_t",
 }
 
-# layout key -> (display name, fwd IS_TND bool token, bwd layout constant token)
+# layout key -> (display name, fwd IS_TND bool token)
 LAYOUTS = [
-    ("bsnd", "BSND", "false", "BSND"),
-    ("tnd",  "TND",  "true",  "TND"),
+    ("bsnd", "BSND", "false"),
+    ("tnd",  "TND",  "true"),
 ]
 
 PRELUDE = (
@@ -54,7 +52,7 @@ def _header(family_desc: str, layout_display: str) -> str:
 
 def fwd_kernel(dtype_key: str, layout: tuple) -> "Kernel":
     ctype = DTYPE_MAP[dtype_key]
-    layout_key, display, is_tnd, _ = layout
+    layout_key, display, is_tnd = layout
     body = (
         _header("forward FAInfer dispatch", display)
         + '#include "../fwd_dispatch_impl.hpp"\n\n'
@@ -66,24 +64,6 @@ def fwd_kernel(dtype_key: str, layout: tuple) -> "Kernel":
         dtype=dtype_key,
         layout=layout_key,
         filename=f"fwd_dispatch_{dtype_key}_{layout_key}.cpp",
-        content=body,
-    )
-
-
-def bwd_kernel(dtype_key: str, layout: tuple) -> "Kernel":
-    ctype = DTYPE_MAP[dtype_key]
-    layout_key, display, _, enum = layout
-    body = (
-        _header("backward FAGGeneral dispatch", display)
-        + '#include "../bwd_dispatch_common.hpp"\n\n'
-        + f"template void bwd_dispatch_run<{ctype}, {enum}>(const BwdLaunchArgs &);"
-        f"  // {display}\n"
-    )
-    return Kernel(
-        family="bwd",
-        dtype=dtype_key,
-        layout=layout_key,
-        filename=f"bwd_dispatch_{dtype_key}_{layout_key}.cpp",
         content=body,
     )
 
@@ -102,7 +82,6 @@ def get_all_kernels() -> List[Kernel]:
     for dtype in DTYPE_MAP:
         for layout in LAYOUTS:
             kernels.append(fwd_kernel(dtype, layout))
-            kernels.append(bwd_kernel(dtype, layout))
     return kernels
 
 
