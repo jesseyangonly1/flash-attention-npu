@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "88371e2cbbb1ade78f123c92684632fa634ba1dd",
+  "prompts": {},
+  "humans": {
+    "h_3b31c5a3219910": {
+      "author": "yyt_hw <yangyuting54@huawei.com>"
+    }
+  }
+}
