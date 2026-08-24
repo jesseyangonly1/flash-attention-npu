@@ -104,13 +104,10 @@ aclError launch_fai_dispatch(uint32_t kernelKey, bool enableDN,
             LAUNCH_CASE(0, 0, 0, 1, 0, 1, 1, 1, half, float, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::MASK_SWA, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 0, 0, 1, 1, 0, 0, half, half, Format::BSND, Format::BSND, CacheMode::normalCache, PageShape::normalShape, MaskCategory::NO_MASK, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 1, 0, 1, 1, 0, 0, half, half, Format::BSND, Format::BSND, CacheMode::normalCache, PageShape::normalShape, MaskCategory::MASK_CAUSAL, CacheLayout::nd)
-            LAUNCH_CASE(0, 0, 0, 1, 1, 1, 0, 0, half, half, Format::BSND, Format::BSND, CacheMode::normalCache, PageShape::normalShape, MaskCategory::MASK_SWA, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 0, 0, 1, 1, 1, 0, half, half, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnBsND, MaskCategory::NO_MASK, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 1, 0, 1, 1, 1, 0, half, half, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnBsND, MaskCategory::MASK_CAUSAL, CacheLayout::nd)
-            LAUNCH_CASE(0, 0, 0, 1, 1, 1, 1, 0, half, half, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnBsND, MaskCategory::MASK_SWA, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 0, 0, 1, 1, 1, 1, half, half, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::NO_MASK, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 1, 0, 1, 1, 1, 1, half, half, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::MASK_CAUSAL, CacheLayout::nd)
-            LAUNCH_CASE(0, 0, 0, 1, 1, 1, 1, 1, half, half, Format::BSND, Format::BSND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::MASK_SWA, CacheLayout::nd)
 
             default:
                 break;
@@ -132,13 +129,10 @@ aclError launch_fai_dispatch(uint32_t kernelKey, bool enableDN,
             LAUNCH_CASE(0, 0, 0, 1, 0, 0, 1, 1, half, float, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::MASK_SWA, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 0, 0, 1, 0, 0, 0, half, half, Format::TND, Format::TND, CacheMode::normalCache, PageShape::normalShape, MaskCategory::NO_MASK, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 1, 0, 1, 0, 0, 0, half, half, Format::TND, Format::TND, CacheMode::normalCache, PageShape::normalShape, MaskCategory::MASK_CAUSAL, CacheLayout::nd)
-            LAUNCH_CASE(0, 0, 0, 1, 1, 0, 0, 0, half, half, Format::TND, Format::TND, CacheMode::normalCache, PageShape::normalShape, MaskCategory::MASK_SWA, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 0, 0, 1, 0, 1, 0, half, half, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnBsND, MaskCategory::NO_MASK, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 1, 0, 1, 0, 1, 0, half, half, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnBsND, MaskCategory::MASK_CAUSAL, CacheLayout::nd)
-            LAUNCH_CASE(0, 0, 0, 1, 1, 0, 1, 0, half, half, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnBsND, MaskCategory::MASK_SWA, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 0, 0, 1, 0, 1, 1, half, half, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::NO_MASK, CacheLayout::nd)
             LAUNCH_CASE(0, 0, 1, 0, 1, 0, 1, 1, half, half, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::MASK_CAUSAL, CacheLayout::nd)
-            LAUNCH_CASE(0, 0, 0, 1, 1, 0, 1, 1, half, half, Format::TND, Format::TND, CacheMode::pagedCache, PageShape::BnNBsD, MaskCategory::MASK_SWA, CacheLayout::nd)
 
             default:
                 break;
