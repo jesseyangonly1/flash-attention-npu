@@ -93,8 +93,8 @@ static FwdMaskDerivation DeriveFwdMask(bool causal, int64_t window_left, int64_t
     FwdMaskDerivation derived;
     derived.is_causal = (window_left < 0 && window_right == 0);
     derived.is_local = (window_left >= 0 || window_right >= 0) && !derived.is_causal;
-    // Match the host tiling: infinite local side -> finite KV bound, not
-    // SPARSE_MODE_INT_MAX (fwd MASK_SWA mishandles INT_MAX right bounds).
+    // Match Tri Dao: infinite local side -> finite KV bound, not INT_MAX
+    // (fwd MASK_SWA mishandles INT_MAX right bounds).
     if (derived.is_local) {
         if (window_left < 0) {
             window_left = max_seqlen_k_bound;
@@ -452,7 +452,7 @@ mha_fwd_kvcache(at::Tensor &q,                 // batch_size x seqlen_q x num_he
         TORCH_CHECK(!(appendKV && is_local), 
                 "NPU FlashAttention append-KV does not support sliding-window attention (window_size) yet");
          // Match Tri Dao set_params_fprop: infinite local side → seqlen_k (finite),
-        // not SPARSE_MODE_INT_MAX (fwd MASK_SWA mishandles INT_MAX right bounds).
+        // not INT_MAX (fwd MASK_SWA mishandles INT_MAX right bounds).
         if (is_local) {
             if (window_size_left < 0) {
                 window_size_left = max_kv_seqlen;
