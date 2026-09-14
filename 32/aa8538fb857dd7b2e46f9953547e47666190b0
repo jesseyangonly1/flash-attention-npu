@@ -1,0 +1,14 @@
+csrc/ascend950/flash_attn_npu_4/online_softmax.hpp
+  h_3b31c5a3219910 1127,1232,1449,1529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "32aa8538fb857dd7b2e46f9953547e47666190b0",
+  "prompts": {},
+  "humans": {
+    "h_3b31c5a3219910": {
+      "author": "yyt_hw <yangyuting54@huawei.com>"
+    }
+  }
+}
